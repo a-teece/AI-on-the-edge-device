@@ -8,8 +8,6 @@
 #endif
 #include "connect_wlan.h"
 #include "mqtt_client.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "ClassLogFile.h"
 #include "MainFlowControl.h"
 #include "StayAwake.h"
@@ -393,27 +391,6 @@ void MQTTdestroy_client(bool _disable = false) {
 
     if (_disable) // Disable MQTT service, avoid restart with MQTTPublish
         mqtt_configOK = false;
-}
-
-void MQTTPrepareForSleep() {
-    /* Call this right before entering deep sleep (see MainFlowControl autoflow loop).
-     *
-     * Deep sleep cuts power abruptly, which looks like an *ungraceful* disconnect to the broker.
-     * Whether Home Assistant then flips to "unavailable" depends on a race between the broker's
-     * keepalive/Last-Will timer and the device's next wake + reconnect - which is why it happens
-     * only sometimes. To make it deterministic we (1) re-publish "connected" retained so the
-     * availability survives the sleep, then (2) send a *clean* MQTT DISCONNECT. Per the MQTT spec
-     * the broker discards the Will on a clean disconnect, so no "connection lost" is published and
-     * HA keeps showing the device available (with its last values) throughout the sleep. A genuine
-     * crash skips this path, so the Will still fires then - real failures are still detected. */
-    if (!mqtt_enabled || !mqtt_initialized || !mqtt_connected || !client) {
-        return;
-    }
-
-    LogFile.WriteToFile(ESP_LOG_INFO, TAG, "Preparing MQTT for deep sleep (re-assert availability + clean disconnect)");
-    esp_mqtt_client_publish(client, lwt_topic.c_str(), lwt_connected.c_str(), 0, 1, 1);  // retained, QoS 1
-    vTaskDelay(pdMS_TO_TICKS(500));  // let the publish flush to the broker before tearing down
-    MQTTdestroy_client(false);       // sends a clean DISCONNECT -> broker suppresses the Last Will
 }
 
 bool getMQTTisEnabled() {
