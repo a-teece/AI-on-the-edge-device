@@ -15,6 +15,7 @@ bool MQTT_Configure(std::string _mqttURI, std::string _clientid, std::string _us
                     int _keepalive, bool SetRetainFlag, void *callbackOnConnected);
 int MQTT_Init();
 void MQTTdestroy_client(bool _disable);
+void MQTTPrepareForSleep();   // Call before deep sleep: re-assert availability + clean disconnect (suppresses LWT)
 
 bool MQTTPublish(std::string _key, std::string _content, int qos, bool retained_flag = 1);            // retained Flag as Standart
 

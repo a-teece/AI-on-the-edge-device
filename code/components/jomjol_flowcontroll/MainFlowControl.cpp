@@ -38,6 +38,10 @@
 #include "psram.h"
 #include "basic_auth.h"
 
+#ifdef ENABLE_MQTT
+#include "interface_mqtt.h"
+#endif // ENABLE_MQTT
+
 // support IDF 5.x
 #ifndef portTICK_RATE_MS
 #define portTICK_RATE_MS portTICK_PERIOD_MS
@@ -1705,6 +1709,15 @@ void task_autodoFlow(void *pvParameter)
 
                 if (auto_interval > fr_delta_ms) {
                     LogFile.WriteToFile(ESP_LOG_INFO, TAG, "Deep sleep for " + std::to_string(auto_interval - fr_delta_ms) + "ms");
+
+#ifdef ENABLE_MQTT
+                    // Gracefully close MQTT before the abrupt power-down so the broker does not
+                    // publish the retained Last Will ("connection lost"). This keeps Home Assistant
+                    // showing the device available (with its last values) throughout the sleep, and
+                    // removes the race between the broker's Will timer and the next wake/reconnect.
+                    // Must run before the peripheral/PHY teardown below, while the network is up.
+                    MQTTPrepareForSleep();
+#endif // ENABLE_MQTT
 
 #if defined(BOARD_ESP32_S3_ALEKSEI)
                     // Battery-powered AI-on-the-edge-cam: kill the W5500 ethernet PHY

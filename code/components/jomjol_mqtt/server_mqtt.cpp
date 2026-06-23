@@ -156,9 +156,31 @@ bool sendHomeAssistantDiscoveryTopic(std::string group, std::string field,
 
     if (entityCategory != "") {
         payload += "\"entity_category\": \"" + entityCategory + "\",";
-    } 
+    }
 
-    payload += 
+    /* expire_after: HA flags the entity stale if the device stops reporting (e.g. battery dies
+     * mid-sleep), while still tolerating a single skipped round - e.g. a reading lost to poor
+     * WiFi. Sized at 2x the digitization interval (one skipped poll) + 120s for wake/connect/
+     * processing jitter.
+     *
+     * Only applied to topics with a predictable per-round cadence:
+     *   - system telemetry (uptime/freeMem/wifiRSSI/CPUtemp) and battery_* are published
+     *     unconditionally every round, so they are reliable liveness indicators;
+     *   - "value" is the user-facing reading; it is published only when a result exists, so a
+     *     sustained absence legitimately means "no fresh reading" and SHOULD go stale.
+     * Excluded: static topics (IP/MAC/firmware/hostname/interval) are sent once and would expire
+     * incorrectly; raw, error, rate and timestamp are published only when non-empty so would
+     * expire on any round a meter omits them; the button/switch controls have no periodic state. */
+    bool perRoundTelemetry =
+        (field == "value" ||
+         field == "uptime" || field == "freeMem" || field == "wifiRSSI" || field == "CPUtemp" ||
+         field == "battery_voltage" || field == "battery_percent");
+    if (perRoundTelemetry && roundInterval > 0) {
+        int expireAfter = (int)(roundInterval * 60.0 * 2) + 120;
+        payload += "\"expire_after\": " + std::to_string(expireAfter) + ",";
+    }
+
+    payload +=
         "\"availability_topic\": \"~/" + std::string(LWT_TOPIC) + "\","  +
         "\"payload_available\": \"" + LWT_CONNECTED + "\","  +
         "\"payload_not_available\": \"" + LWT_DISCONNECTED + "\",";
